@@ -152,3 +152,23 @@ The platform manages the bot's webhook for you, derived from your deployed
 `handlers/*`, and refreshes it on `push`. If it ever drifts — e.g. someone called
 `setWebhook` with the raw bot token — `npx tgcloud webhook` shows the mismatch and
 `npx tgcloud webhook sync` repairs it.
+
+## Правила доработки этого бота
+
+Этот проект предназначен для Telegram Serverless и SDK из `sdk` / `sdk/db`.
+
+- Код платформы находится только в `tgcloud/`. В runtime нет Node.js, npm imports, локальной файловой системы и фоновых таймеров.
+- Относительные импорты оканчиваются на `.js` и остаются внутри `tgcloud/`.
+- Каждая DB-операция асинхронна. Не добавляй foreign keys или предположения о транзакциях SDK.
+- Схему меняют через `push`, затем `migrate`; не создавай таблицы из обычных обработчиков.
+- Каждая операция проверяет текущий owner_chat_id и права инициатора. `sender_chat` не является User.
+- В группе свободный текст не маршрутизируется: нужны точный Reply или адресная форма.
+- Reply-привязка включает chat_id, message_id и topic_id; форма также включает actor user_id.
+- Переписку передают новым `sendMessage` без исходных профилей, entities и forward metadata.
+- Не сохраняй тело переписки в таблицы или журналы. Не выводи токены и полные updates в логи.
+- Не заменяй криптографические токены на Math.random или Telegram ID.
+- Не добавляй автоматический повтор отправки после неопределённой сетевой ошибки.
+- Перед передачей изменений запускай `npm run verify`; при изменении QR — независимое декодирование из `tests/QR_TESTING.md`.
+- Изменения публичной семантики отражай в README и `/privacy` / `/help`.
+
+Локальные проверки требуют Node.js 24+. Учётные данные `.tgcloud/` никогда не включаются в архивы и Git.

@@ -1,2 +1,20 @@
-.tgcloud/
 node_modules/
+.tgcloud/
+
+# секреты
+.env
+.env.*
+!.env.example
+
+# локальные документы и рабочие заметки — не для публичного репозитория
+docs/
+logs/
+plans/
+tasks/
+*.log
+
+# тесты и сборка
+coverage/
+test-output/
+
+.DS_Store
