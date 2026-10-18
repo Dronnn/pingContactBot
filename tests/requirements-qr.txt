@@ -1,0 +1,4 @@
+# Optional, development-only dependencies for independent QR decoding tests.
+# Never import these packages from the deployed bot.
+zxing-cpp==3.1.1
+Pillow==12.3.0
