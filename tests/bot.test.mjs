@@ -96,6 +96,45 @@ test('два посетителя одного контакта получают
   assert.notEqual(first.id, second.id);
 });
 
+test('номер диалога считается внутри каждого чата, а не по всей базе', async () => {
+  const personal = await contact(101, 'Личная вещь');
+  await visit(personal, 201);
+  await say(201, 'Первое обращение');
+  assert.match(deliveries(101).at(-1).text, /Собеседник #1/);
+
+  const group = await contact(-100, 'Дверь мастерской');
+  const groupVisit = await visit(group, 202);
+  await say(202, 'Первое обращение в группу');
+  const toGroup = deliveries(-100).at(-1);
+  assert.match(toGroup.text, /Собеседник #1/);
+  assert.ok(!toGroup.text.includes('#2'), 'группа не видит счётчик чужих чатов');
+
+  // У посетителя свой счёт: второе обращение — #2, а владелец второй карточки видит #1.
+  const other = await contact(102, 'Чужая вещь');
+  await visit(other, 201);
+  await say(201, 'Второе моё обращение');
+  assert.match(deliveries(102).at(-1).text, /Собеседник #1/);
+  assert.match(lastText(201).text, /диалог #2/);
+  assert.equal(groupVisit.id, 2, 'глобальные id не переиспользуются, но наружу не показываются');
+
+  await click(-100, 'inbox:0', 301);
+  const labels = lastText(-100).reply_markup.inline_keyboard.flat().map((button) => button.text);
+  assert.ok(labels.some((label) => label.startsWith('#1 · ')));
+  assert.ok(labels.every((label) => !label.includes('#2')));
+});
+
+test('/reply понимает номер внутри чата, а не глобальный id', async () => {
+  const first = await contact(101, 'Первая');
+  const second = await contact(101, 'Вторая');
+  await visit(first, 201);
+  await visit(second, 202);
+  await say(101, '/reply 2 Ответ второму');
+  assert.ok(deliveries(202, 'Ответ по поводу').at(-1).text.endsWith('Ответ второму'));
+  assert.equal(deliveries(201).length, 0);
+  await say(101, '/reply 3 Никому');
+  assert.match(lastText(101).text, /Диалога №3 нет/);
+});
+
 test('личная форма создания правильно использует ForceReply и не требует @mention', async () => {
   await say(101, '/new');
   const state = await store.getSession(101, 101);

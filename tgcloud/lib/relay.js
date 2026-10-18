@@ -3,7 +3,7 @@ import * as store from './store.js';
 import { LIMITS } from './config.js';
 import { requireConversation, requireActive, checkGroupDestination } from './access.js';
 import { button as b, keyboard as kb, validateMessage, unavailable, UserError } from './domain.js';
-import { send } from './ui.js';
+import { send, dialogNumber } from './ui.js';
 
 export async function relay(ctx, conversationId, rawText, expectedSide = null) {
   const text = validateMessage(rawText);
@@ -34,7 +34,10 @@ export async function relay(ctx, conversationId, rawText, expectedSide = null) {
   const markup = side === 'visitor'
     ? kb([[b('Ответить', `reply:${v.id}`), b('Диалог', `dialog:${v.id}`)], [b('Заблокировать', `askblock:${v.id}`)]])
     : kb([[b('Написать ещё', `reply:${v.id}`), b('Завершить', `askclose:${v.id}`)]]);
-  const body = `${side === 'visitor' ? 'По поводу' : 'Ответ по поводу'} «${v.title}»\n${side === 'visitor' ? 'Собеседник' : 'Диалог'} #${v.id}\n\n${text}`;
+  // Номер в шапке — локальный для получателя: владелец видит счёт своих
+  // диалогов, посетитель — своих обращений. Глобальный id не раскрывается.
+  const shownNumber = await dialogNumber(v, side === 'visitor' ? 'owner' : 'visitor');
+  const body = `${side === 'visitor' ? 'По поводу' : 'Ответ по поводу'} «${v.title}»\n${side === 'visitor' ? 'Собеседник' : 'Диалог'} #${shownNumber}\n\n${text}`;
   const params = () => ({
     chat_id: target, text: body, reply_markup: markup,
     ...(side === 'visitor' && v.topic_id ? { message_thread_id: v.topic_id } : {}),
@@ -81,8 +84,8 @@ export async function relay(ctx, conversationId, rawText, expectedSide = null) {
     if (side === 'visitor') await store.setSession(ctx.chat.id, ctx.user.id, 'visit', v.id, 0, 0);
     else await store.clearSession(ctx.chat.id, ctx.user.id);
     await send(ctx, side === 'visitor'
-      ? `Сообщение отправлено ${v.owner_kind === 'group' ? 'в группу' : 'владельцу'}.\nПо поводу «${v.title}» · диалог #${v.id}.\nМожно написать ещё или выйти из диалога.`
-      : `Ответ отправлен в диалог #${v.id} по поводу «${v.title}».`,
+      ? `Сообщение отправлено ${v.owner_kind === 'group' ? 'в группу' : 'владельцу'}.\nПо поводу «${v.title}» · диалог #${await dialogNumber(v, 'visitor')}.\nМожно написать ещё или выйти из диалога.`
+      : `Ответ отправлен в диалог #${await dialogNumber(v, 'owner')} по поводу «${v.title}».`,
       kb(side === 'visitor' ? [[b('Диалог', `dialog:${v.id}`), b('Выйти из ввода', 'cancel')]] : [[b('Диалог', `dialog:${v.id}`)]]));
   } catch (error) {
     // Ошибка подтверждения отправителю не отменяет уже успешную доставку адресату.

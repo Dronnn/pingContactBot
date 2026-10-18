@@ -80,7 +80,7 @@ async function openLink(ctx, token) {
 async function replyPrompt(ctx, id) {
   const { conversation: v, side } = await requireConversation(ctx, id);
   await requireActive(v);
-  return ui.prompt(ctx, `reply_${side}`, v.id, `напиши ${side === 'owner' ? 'ответ собеседнику' : 'сообщение'} по поводу «${v.title}», диалог #${v.id}. ${side === 'visitor' && v.owner_kind === 'group' ? 'Его увидят участники группы.' : ''}`);
+  return ui.prompt(ctx, `reply_${side}`, v.id, `напиши ${side === 'owner' ? 'ответ собеседнику' : 'сообщение'} по поводу «${v.title}», диалог #${await ui.dialogNumber(v, side)}. ${side === 'visitor' && v.owner_kind === 'group' ? 'Его увидят участники группы.' : ''}`);
 }
 
 async function handleCommand(ctx, command) {
@@ -107,9 +107,11 @@ async function handleCommand(ctx, command) {
       return ui.send(ctx, 'Ввод отменён. Новые сообщения не будут отправляться собеседнику автоматически. Ответы на конкретное сообщение бота остаются доступны.', kb([[b('Контакты', 'contacts:0'), b('Диалоги', 'inbox:0')]]));
     case 'reply': {
       if (!head) throw new UserError('Формат: /reply 12 Текст ответа. Номер диалога есть в /inbox.');
-      const id = integerId(head);
-      if (!rest.length) return replyPrompt(ctx, id);
-      return relay(ctx, id, command.args.slice(head.length).trim());
+      const number = integerId(head);
+      const found = await store.conversationByNumber(ctx.chat.id, ctx.user.id, !isGroup(ctx.chat), number);
+      if (!found) throw new UserError(`Диалога №${number} нет в /inbox. Открой список и ответь кнопкой «Ответить».`);
+      if (!rest.length) return replyPrompt(ctx, found.id);
+      return relay(ctx, found.id, command.args.slice(head.length).trim());
     }
     case 'move': {
       if (!isGroup(ctx.chat)) throw new UserError('Эта команда нужна в группе: /move номер_контакта.');
@@ -271,7 +273,7 @@ async function handleCallback(ctx, data) {
     case 'askblock': {
       const { conversation: v, side } = await requireConversation(ctx, id, true);
       if (side !== 'owner') throw unavailable();
-      return confirm(ctx, `Заблокировать собеседника #${id}?\n\nОн не сможет писать ни по одному контакту ${isGroup(ctx.chat) ? 'этой группы' : 'этого владельца'}. Ответы ему тоже остановятся. Разблокировка доступна в /blocked.`, 'Заблокировать', `block:${v.id}`, `dialog:${v.id}`);
+      return confirm(ctx, `Заблокировать собеседника #${await ui.dialogNumber(v, 'owner')}?\n\nОн не сможет писать ни по одному контакту ${isGroup(ctx.chat) ? 'этой группы' : 'этого владельца'}. Ответы ему тоже остановятся. Разблокировка доступна в /blocked.`, 'Заблокировать', `block:${v.id}`, `dialog:${v.id}`);
     }
     case 'block':
     case 'unblock': {

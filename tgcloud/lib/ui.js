@@ -72,15 +72,24 @@ export async function qr(ctx, id, asDocument = false) {
   return asDocument ? api.sendDocument({ ...params, document: file }) : api.sendPhoto({ ...params, photo: file });
 }
 
+// Номер для показа получателю: считает только его собственную область видимости.
+export function dialogNumber(v, side) {
+  return side === 'owner'
+    ? store.conversationNumber(v.owner_chat_id, v.owner_chat_id, v.owner_kind !== 'group', v.id)
+    : store.conversationNumber(v.visitor_id, v.visitor_id, true, v.id);
+}
+
 export async function inbox(ctx, page = 0) {
   await requireMember(ctx);
   await store.clearSession(ctx.chat.id, ctx.user.id);
   const list = await store.listConversations(ctx.chat.id, ctx.user.id, !isGroup(ctx.chat), page * LIMITS.pageSize);
-  const rows = list.slice(0, LIMITS.pageSize).map((v) => {
+  const rows = [];
+  for (const v of list.slice(0, LIMITS.pageSize)) {
     const side = v.owner_chat_id === ctx.chat.id ? 'Входящий' : 'Моё обращение';
     const closed = v.status === 'closed' || v.generation !== v.contact_generation ? ' · закрыт' : '';
-    return [b(`#${v.id} · ${shortTitle(v.title, 24)} · ${side}${closed}`, `dialog:${v.id}`)];
-  });
+    const number = await store.conversationNumber(ctx.chat.id, ctx.user.id, !isGroup(ctx.chat), v.id);
+    rows.push([b(`#${number} · ${shortTitle(v.title, 24)} · ${side}${closed}`, `dialog:${v.id}`)]);
+  }
   const nav = [];
   if (page > 0) nav.push(b('Назад', `inbox:${page - 1}`));
   if (list.length > LIMITS.pageSize) nav.push(b('Далее', `inbox:${page + 1}`));
@@ -110,14 +119,18 @@ export async function dialog(ctx, id) {
     rows.push([b('Карточка', `card:${v.contact_id}`)]);
   }
   rows.push([b('Все диалоги', 'inbox:0')]);
-  return send(ctx, `По поводу «${v.title}»\nДиалог #${v.id}\n${status}\n\n${side === 'owner' ? 'Ответ поступит собеседнику от имени контакта.' : v.owner_kind === 'group' ? 'Сообщения увидят участники группы. Ответ придёт от имени контакта.' : 'Сообщения получит владелец контакта.'}`, kb(rows));
+  return send(ctx, `По поводу «${v.title}»\nДиалог #${await dialogNumber(v, side)}\n${status}\n\n${side === 'owner' ? 'Ответ поступит собеседнику от имени контакта.' : v.owner_kind === 'group' ? 'Сообщения увидят участники группы. Ответ придёт от имени контакта.' : 'Сообщения получит владелец контакта.'}`, kb(rows));
 }
 
 export async function blockedList(ctx, page = 0) {
   await requireMember(ctx, true);
   await store.clearSession(ctx.chat.id, ctx.user.id);
   const list = await store.listBlocks(ctx.chat.id, page * LIMITS.pageSize);
-  const rows = list.slice(0, LIMITS.pageSize).map((item) => [b(`Разблокировать собеседника #${item.conversation_id}`, `unblockid:${item.id}`)]);
+  const rows = [];
+  for (const item of list.slice(0, LIMITS.pageSize)) {
+    const number = await store.conversationNumber(ctx.chat.id, ctx.user.id, !isGroup(ctx.chat), item.conversation_id);
+    rows.push([b(`Разблокировать собеседника #${number}`, `unblockid:${item.id}`)]);
+  }
   const nav = [];
   if (page > 0) nav.push(b('Назад', `blocked:${page - 1}`));
   if (list.length > LIMITS.pageSize) nav.push(b('Далее', `blocked:${page + 1}`));

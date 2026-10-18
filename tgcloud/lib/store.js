@@ -79,6 +79,30 @@ const conversationSelect = `SELECT v.*, c.owner_chat_id, c.owner_kind, c.title, 
 
 export const getConversation = (id) => db.get(`${conversationSelect} WHERE v.id = :id`, { ':id': id });
 
+// Номер диалога наружу — не глобальный id, а ранг в области видимости одного
+// чата: владелец и группа считают диалоги своих карточек (в личке — вместе со
+// своими обращениями к чужим), посетитель — все свои обращения. По номеру из
+// одного чата нельзя узнать активность остальных. Диалоги не удаляются, поэтому
+// номер стабилен; номера диалогов удалённых карточек не переиспользуются.
+const numberParams = (chatId, visitorId, includeVisits) => ({
+  ':chat': chatId, ':visitor': visitorId, ':visits': includeVisits ? 1 : 0,
+});
+
+export async function conversationNumber(chatId, visitorId, includeVisits, conversationId) {
+  const row = await db.get(`SELECT count(*) AS n FROM conversations v JOIN contacts c ON c.id = v.contact_id
+    WHERE v.id <= :id AND (c.owner_chat_id = :chat OR (:visits = 1 AND v.visitor_id = :visitor))`, {
+    ...numberParams(chatId, visitorId, includeVisits), ':id': conversationId,
+  });
+  return row?.n || 0;
+}
+
+export const conversationByNumber = (chatId, visitorId, includeVisits, number) => db.get(`${conversationSelect}
+  WHERE v.id = (SELECT v2.id FROM conversations v2 JOIN contacts c2 ON c2.id = v2.contact_id
+    WHERE c2.owner_chat_id = :chat OR (:visits = 1 AND v2.visitor_id = :visitor)
+    ORDER BY v2.id LIMIT 1 OFFSET :index)`, {
+  ...numberParams(chatId, visitorId, includeVisits), ':index': number - 1,
+});
+
 export async function openConversation(contact, visitorId) {
   const time = now();
   await db.run(`INSERT INTO conversations (contact_id, visitor_id, generation, created_at, updated_at)
