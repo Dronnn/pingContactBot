@@ -1,12 +1,17 @@
 {
-  "name": "pingContactBot",
+  "name": "contact-for-thing",
+  "version": "1.0.0",
   "private": true,
-  "devDependencies": {
-    "@tgcloud/cli": "^0.2.0"
-  },
+  "description": "Контакт для вещи — личные и общие QR-контакты в Telegram Serverless",
+  "type": "module",
+  "engines": { "node": ">=24.0.0" },
   "scripts": {
+    "test": "node --import ./tests/register.mjs --test --test-isolation=none tests/*.test.mjs",
+    "check": "node scripts/check-project.mjs",
+    "verify": "npm run check && npm test",
     "deploy": "tgcloud push",
-    "status": "tgcloud status",
-    "run": "tgcloud run"
-  }
+    "migrate": "tgcloud migrate",
+    "status": "tgcloud status"
+  },
+  "devDependencies": { "@tgcloud/cli": "0.2.0" }
 }
